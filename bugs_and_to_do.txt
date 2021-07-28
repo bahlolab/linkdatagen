@@ -1,0 +1,10 @@
+General: 
+# Create an updated annotation file for 1000Genomes data, HapMap2/3
+
+
+
+RELATE:
+if binsize is set to 0, then the genetic map distance is increased slightly, apparently trying to get around the 
+REALTE unique SNP mapping position requirement, BUT the increase is too small! Maybe just simply don't allow
+binsize of 0 when using RELATE? - Rick
+
