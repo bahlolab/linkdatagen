@@ -73,4 +73,7 @@ nrow(hmu_2)
 hmu_2 %>% filter((physical_position_build38 > lead(physical_position_build38) | lag(physical_position_build38) > physical_position_build38) & Chrom == lead(Chrom) & lag(Chrom) == Chrom) %>% select(Chrom, physical_position_build38, Strand, A, B, strand) %>% View()
 hmu_2 %>% filter((deCODE_genetic_map_position > lead(deCODE_genetic_map_position) | lag(deCODE_genetic_map_position) > deCODE_genetic_map_position) & Chrom == lead(Chrom) & lag(Chrom) == Chrom) %>% select(Chrom, physical_position_build38, Strand, A, B, strand) %>% View()
 
-write_tsv(hmu_2, "annotHapMap3U_hg38.txt")
+hmu_3 <- hmu_2 %>%
+  select(-strand)
+
+write_tsv(hmu_3, "annotHapMap3U_hg38.txt")
