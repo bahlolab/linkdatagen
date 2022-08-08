@@ -1,6 +1,4 @@
 #!/usr/bin/perl -w
-# svn $Revision: 997 $
-# svn $LastChangedDate: 2016-02-03 13:38:44 +1100 (Wed, 03 Feb 2016) $
 
 my $license = <<LICENSE;
     Copyright (C) 2009-2014 Melanie Bahlo, Catherine Bromhead, Thomas Scerri,
@@ -231,9 +229,8 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 
-'$Revision: 997 $' =~ /(\d+)/ or die "Revision not found (script bug)";
-my $script_revision = $1;
-'$LastChangedDate: 2016-02-03 13:38:44 +1100 (Wed, 03 Feb 2016) $' =~ /\((.+)\)/;
+my $script_revision = "1000";
+'$LastChangedDate: 2022-08-06 (Sat, 06 Aug 2022) $' =~ /\((.+)\)/;
 my $last_changed_date = $1;
 
 # Compressed file opening modules, allows script to work even if modules are not installed:
@@ -2397,7 +2394,7 @@ my @header_array;
             $strand_col = $hash_header_index{"Strand"};
             $topbot_col = $hash_header_index{"TOPBOT"};
             $genetic_pos_col = $hash_header_index{"deCODE_genetic_map_position"};
-            $physical_pos_col = $hash_header_index{"physical_position_build37"};
+            $physical_pos_col = $hash_header_index{"physical_position_build37"} || $hash_header_index{"physical_position_build38"};
             if($pop eq "USR" || defined($bestPopTest)) {
                 # User defined column
                 $freq_col = $popCol;
