@@ -379,7 +379,7 @@ sub read_in_annot_vcf(){
             # Check head comment lines
             if(/^#/) {
                 # For old version format
-                if($line =~ /^# Minimum LINKDATAGEN revision: (\d+)$/) {
+                if(/^# Minimum LINKDATAGEN revision: (\d+)$/) {
                     if(997 < $1) {
                         # this script is too old
                         print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)"); 
@@ -388,11 +388,11 @@ sub read_in_annot_vcf(){
                 }
                 # For new version format:
                 my @min_ldg_for_annot;
-                if(@min_ldg_for_annot = $line =~ /^# Minimum LINKDATAGEN revision: v(\d+)\.(\d+)\.(\d+)$/) {
+                if(@min_ldg_for_annot = /^# Minimum LINKDATAGEN revision: v(\d+)\.(\d+)\.(\d+)$/) {
                     $script_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
                     if($1 < $min_ldg_for_annot[0] || $2 < $min_ldg_for_annot[1] || $3 < $min_ldg_for_annot[2]) {
                         # this script is too old
-                        $line =~ /^# Minimum LINKDATAGEN revision: v(\d+\.\d+\.\d+)$/;
+                        /^# Minimum LINKDATAGEN revision: v(\d+\.\d+\.\d+)$/;
                         print_usage("Annotation file is requires newer revision of LINKDATAGEN. (Version $1 required, but have Perl script v$script_revision)"); 
                     }
                     $annot_version_check = 1;
