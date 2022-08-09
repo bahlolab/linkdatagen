@@ -51,6 +51,20 @@ hmu_1 <- hmu %>%
   #filter(physical_position_build38 < lead(physical_position_build38) | Chrom != lead(Chrom)) %>% 
   select(Chrom, physical_position_build38, everything())
 
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_point()
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_point() +
+  xlim(0, 1e6) + ylim(-1e6, 1e6)
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_hex() +
+  xlim(0, 1e6) + ylim(-1e6, 1e6)
+
 # Filter out the bad ordering of SNPs. This is probably nowhere near the fastest
 # way to do this, but won't have to run this many times (hopefully).
 #hmu_2 <- hmu_1
