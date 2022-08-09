@@ -1,11 +1,24 @@
 library(tidyverse)
+library(glue)
 
-bed <- read_tsv("hglft_genome_33f8_655670.bed", 
+setwd("~/Documents/linkdatagen/")
+
+hapmap_version <- "2" # or "3"
+
+if(hapmap_version == "2") {
+  bed <- read_tsv("hglft_genome_d0ad_be980.bed", 
+                  col_names = c("chrom", "chromStart", "chromEnd", "name", "score", "strand"))
+}
+if(hapmap_version == "3") {
+  bed <- read_tsv("hglft_genome_33f8_655670.bed", 
                 col_names = c("chrom", "chromStart", "chromEnd", "name", "score", "strand"))
+  annotation <- read_tsv("data/annotHapMap3U.txt", comment = "#")
+}
 
 bed
 
-annotation <- read_tsv("data/annotHapMap3U.txt", comment = "#")
+annotation <- read_tsv(glue("data/annotHapMap{hapmap_version}U.txt"), comment = "#")
+
 
 hmu <- inner_join(annotation, bed, by = c("rs_name" = "name"))
 
@@ -36,7 +49,6 @@ hmu_1 <- hmu %>%
   #) %>% 
   #filter(Chrom == "chr1" & (physical_position_build38 >= 120381544 & physical_position_build38 <= 121605956 ))
   #filter(physical_position_build38 < lead(physical_position_build38) | Chrom != lead(Chrom)) %>% 
-  select(-physical_position_build37, -chrom, -chromStart, -score) %>% 
   select(Chrom, physical_position_build38, everything())
 
 # Filter out the bad ordering of SNPs. This is probably nowhere near the fastest
@@ -74,6 +86,7 @@ hmu_2 %>% filter((physical_position_build38 > lead(physical_position_build38) | 
 hmu_2 %>% filter((deCODE_genetic_map_position > lead(deCODE_genetic_map_position) | lag(deCODE_genetic_map_position) > deCODE_genetic_map_position) & Chrom == lead(Chrom) & lag(Chrom) == Chrom) %>% select(Chrom, physical_position_build38, Strand, A, B, strand) %>% View()
 
 hmu_3 <- hmu_2 %>%
+  select(-physical_position_build37, -chrom, -chromStart, -score) %>% 
   select(-strand)
 
-write_tsv(hmu_3, "annotHapMap3U_hg38.txt")
+write_tsv(hmu_3, glue("annotHapMap{hapmap_version}U_hg38.txt"))
