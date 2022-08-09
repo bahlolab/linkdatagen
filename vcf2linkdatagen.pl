@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
-# svn $Revision: 997 $
-# svn $LastChangedDate: 2016-02-03 13:38:44 +1100 (Wed, 03 Feb 2016) $
+my $script_revision = "3.1.0";
+my $last_changed_date = "2022-08-09 16:52 AEST";
 
 #This is a companion script to linkdatagen.pl, to be used on .vcf or .vcf-like files.
 #This script creates a brlmm genotype call file from genotypes called from MPS data
@@ -9,6 +9,25 @@
 #0 = AA call
 #1 = AB call
 #2 = BB call
+
+my $license = <<LICENSE;
+    Copyright (C) 2009-2022 Melanie Bahlo, Catherine Bromhead, Thomas Scerri,
+    Katherine Smith, Rick Tankard and Luke Gandolfo. 
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+LICENSE
 
 =head1 VCF2LINKDATAGEN
 
@@ -73,10 +92,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-
-my $script_revision = "1000";
-'$LastChangedDate: 2020-08-06 (Sat, 06 Aug 2022) $' =~ /\((.+)\)/;
-my $last_changed_date = $1;
 
 # Compressed file opening modules, allows script to work even if modules are not installed:
 my $perliogzip = 0;
@@ -156,7 +171,7 @@ if(defined($help)){
 }
 
 print STDERR "\n\t\t----------VCF2LINKDATAGEN----------\n\t\t\tCJ Bromhead, M Bahlo\n\t\t-----------------------------------\n\n";
-print STDERR "This script updated on $last_changed_date (r$script_revision)\n";
+print STDERR "This script updated on $last_changed_date (v$script_revision)\n";
 
 if(!defined($annotfile)) {
 	print_usage("Missing annotation file");
@@ -363,11 +378,22 @@ sub read_in_annot_vcf(){
         if($head_comments) {
             # Check head comment lines
             if(/^#/) {
-                # In comment header
-                if(/^# Minimum LINKDATAGEN revision: (\d+)$/) {
-                    if($script_revision < $1) {
+                # For old version format
+                if($line =~ /^# Minimum LINKDATAGEN revision: (\d+)$/) {
+                    if(997 < $1) {
                         # this script is too old
-                        print_usage("Annotation file is requires newer revision of LINKDATAGEN. (Revision $1 required, but have $script_revision)"); 
+                        print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)"); 
+                    }
+                    $annot_version_check = 1;
+                }
+                # For new version format:
+                my @min_ldg_for_annot;
+                if(@min_ldg_for_annot = $line =~ /^# Minimum LINKDATAGEN revision: v(\d+)\.(\d+)\.(\d+)$/) {
+                    $script_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
+                    if($1 < $min_ldg_for_annot[0] || $2 < $min_ldg_for_annot[1] || $3 < $min_ldg_for_annot[2]) {
+                        # this script is too old
+                        $line =~ /^# Minimum LINKDATAGEN revision: v(\d+\.\d+\.\d+)$/;
+                        print_usage("Annotation file is requires newer revision of LINKDATAGEN. (Version $1 required, but have Perl script v$script_revision)"); 
                     }
                     $annot_version_check = 1;
                 }
