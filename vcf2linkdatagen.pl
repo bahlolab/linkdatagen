@@ -33,7 +33,9 @@ LICENSE
 
 
                     ----------VCF2LINKDATAGEN----------
-                           CJ Bromhead, M Bahlo
+                           CJ Bromhead, M Bahlo,
+                             T Scerri, K Smith,
+                          R M Tankard, L Gandolfo
                     -----------------------------------
 
 =head1 Usage
@@ -170,8 +172,26 @@ if(defined($help)){
     );
 }
 
-print STDERR "\n\t\t----------VCF2LINKDATAGEN----------\n\t\t\tCJ Bromhead, M Bahlo\n\t\t-----------------------------------\n\n";
-print STDERR "This script updated on $last_changed_date (v$script_revision)\n";
+print STDERR <<BANNER;
+                    ----------VCF2LINKDATAGEN----------
+                           CJ Bromhead, M Bahlo,
+                             T Scerri, K Smith,
+                          R M Tankard, L Gandolfo
+                    -----------------------------------
+
+If you use LINKDATAGEN please acknowledge by citing:
+Bahlo M, Bromhead CJ. Generating linkage mapping files from Affymetrix SNP chip data. Bioinformatics 2009;25(15):1961-2.
+
+If you use VCF2LINKDATAGEN (for MPS data) please acknowledge by citing:
+Smith KR, Bromhead CJ, Hildebrand MS, Shearer AE, Lockhart PJ, Najmabadi H, Leventer RJ, McGillivray G, Amor DJ, Smith RJ, Bahlo M. 
+Reducing the exome search space for Mendelian diseases using genetic linkage analysis of exome genotypes. Genome Biology 2011;12:R85.
+
+This script is free software that is licensed under GPL v2 and comes with no warranty. For details, run the -license option. 
+
+This script updated on $last_changed_date (v$script_revision).
+
+BANNER
+;
 
 if(!defined($annotfile)) {
 	print_usage("Missing annotation file");
