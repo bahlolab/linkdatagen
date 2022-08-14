@@ -5938,7 +5938,7 @@ my $lmauto=1; # lmauto=0 if lm_auto otherwise lm_markers or lm_bayes is required
 		# marker frequency data
 		#set markers 1 	freqs 0.85 0.15
 		for ($j=0;$j<$chr_snp_cnt[$c];$j++){
-			print OUT2 "set markers ",$j+1," freq ";
+			print OUT2 "set markers ",$j+1," allele freqs ";
 			$snpfreq=$chr_order_snp[$c][$j][4];
 			$first=sprintf("%1.2f",$snpfreq);
 			$second=1-$first;
