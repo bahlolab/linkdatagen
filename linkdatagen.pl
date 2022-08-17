@@ -1746,10 +1746,11 @@ my $den;
 					$genos_orig{$temp[$SNP_col]}[$k]=$temp[$alleleA_col].$temp[$alleleB_col]; # genos_orig has for each SNP an entry for each genotype in the order of the samples in the whichSamplesFile
 					$line_cnt+=1;
 					if($line_cnt%100000==0){
-						print "Read in $line_cnt genotyping lines of file $filename\n";
+						print "Read in $line_cnt genotyping lines of file $filename\r";
 					}
 				}
 			}
+            print "Read in $line_cnt genotyping lines of file $filename\n";
 			print "Total number of SNPs in the genotyping file with rs designations = $line_cnt\n";
 			push(@total_line_cnt,$line_cnt);
 			$num_rs_snps[$k] = $line_cnt;
@@ -1882,10 +1883,11 @@ my $den;
 
 						if($line_cnt%100000==0){
 
-							print "Read in $line_cnt genotyping lines of file $filename\n";
+							print "Read in $line_cnt genotyping lines of file $filename\r";
 						}
 					}
 				}
+                print "Read in $line_cnt genotyping lines of file $filename\n";
 
 				print "Total number of SNPs (excluding INDELs) with \"rs\" SNP IDs in the genotyping file for sample $sampleName = $line_cnt\n";
 				push(@total_line_cnt,$line_cnt);
@@ -1964,7 +1966,7 @@ my $den;
 					}
 					$line_cnt+=1;
 					if($line_cnt%100000==0){
-						print "Read in $line_cnt genotyping lines\n";
+						print "Read in $line_cnt genotyping lines\r";
 					}
 				}
 			}
@@ -1995,10 +1997,11 @@ my $den;
 				}
 				$line_cnt+=1;
 				if($line_cnt%100000==0){
-					print "Read in $line_cnt genotyping lines\n";
+					print "Read in $line_cnt genotyping lines\r";
 				}
 			}
 		}
+        print "Read in $line_cnt genotyping lines\n";
 		print "Total number of SNPs in (b/c)rlmm file =$line_cnt\n";
 	}
 
@@ -2220,55 +2223,42 @@ sub read_in_annot_illumina_legacy{
 		if($temp[1] =~/[rs]\d+/ && $temp[$popCol] =~ /[\d\.]+/){  #skip SNP if there is no frequency annotation
 
 			if (%regions)           {       #test if regions are being used and if so whether region included...
-
 				my $inRegion = 0;
-
 				if (!defined($regions{$temp[2]})){
-
 					next LINE;
 				}
 
 				else {
-
 					foreach my $tempRegion (@{$regions{$temp[2]}}) {
-
 						if ($temp[5] >= $tempRegion->[0] && $temp[5] <= $tempRegion->[1]) {
-
 							$inRegion = 1;
-
 							last;
 						}
 					}
 
 					if ($inRegion == 0) {
-
 						next LINE;
 					}
 				}
 			}
 
 			if ($temp[6] =~ /[ID]/) {			#This is to exclude 'SNPs' that are defined by insertion/deletion alleles
-
 				next LINE;
 			}
 
 			if (!defined($kCT) && $temp[6] =~ /A\/T|T\/A|G\/C|C\/G/) {			#$kCT is an option to over-ride default behaviour here which is to exclude 'SNPs' that are either A/T, T/A, C/G or G/C
-
 				next LINE;
 			}
 
 			if (defined($popHetTest) && ($temp[$popCol] < 0.4 || $temp[$popCol] > 0.6)) {	#when running the -popHetTest, this ensures SNPs are chosen within a narrow window of MAF > 0.4
-
 				next LINE;
 			}
 
 			if (defined($minMAF) && ($temp[$popCol] < $minMAF || $temp[$popCol] > (1 - $minMAF))) {	#used to specify the minimum MAF acceptable
-
 				next LINE;
 			}
 
 			if (defined($maxMAF) && ($temp[$popCol] > $maxMAF && $temp[$popCol] < (1 - $maxMAF))) {	#used to specify the maximum MAF acceptable
-
 				next LINE;
 			}
 
@@ -2303,10 +2293,11 @@ sub read_in_annot_illumina_legacy{
 				print OUT5 "\n";
 			}
 			if($line_cnt%100000==0){
-				print "$line_cnt SNPs so far selected from the annotation file...\n";
+				print "$line_cnt SNPs so far selected from the annotation file...\r";
 			}
 		}
 	}	
+    print "$line_cnt SNPs so far selected from the annotation file...\n";
 		
 	close(OUT3);
 	close(OUT4);
@@ -2508,10 +2499,11 @@ my @header_array;
 				print OUT5 "\n";
 			}
 			if($line_cnt%100000==0){
-				print "$line_cnt SNPs so far selected from the annotation file...\n";
+				print "$line_cnt SNPs so far selected from the annotation file...\r";
 			}
 		}
 	}
+    print "$line_cnt SNPs so far selected from the annotation file...\n";
 
 	close(OUT3);
 	close(OUT4);

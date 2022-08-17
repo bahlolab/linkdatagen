@@ -222,17 +222,17 @@ if (defined($vc) && !defined($variantCaller)) {
 
 $variantCaller = lc $variantCaller;
 
-if (!($variantCaller eq "unifiedgenotyper" || $variantCaller eq "ug" || $variantCaller eq "mpileup" || $variantCaller eq "mp")) {
-
+if (!($variantCaller eq "unifiedgenotyper" || $variantCaller eq "ug" || 
+        $variantCaller eq "mpileup" || $variantCaller eq "mp" ||
+        $variantCaller eq "haplotypecaller" || $variantCaller eq "hc"
+     )) {
 	print_usage("Must specify either -variantCaller [mpileup | unifiedGenotyper] or in short form -vc [mp | ug]");
-
 } elsif ($variantCaller eq "ug") {
-
 	$variantCaller = "unifiedgenotyper";
-	
 } elsif ($variantCaller eq "mp") {
-
 	$variantCaller = "mpileup";
+} elsif ($variantCaller eq "hc") {
+    $variantCaller = "haplotypecaller"
 }
 
 my %flipper=();
@@ -387,14 +387,13 @@ sub read_in_annot_vcf(){
 	my $key1;
 	my @temp;
 	my @arr4;
-	my $totalline_cnt=0;
+	my $totalline_cnt=-1;
 	my %hash_header_index=();
 	my @header_array;
     my $head_comments = 1;
     my $annot_version_check = 0;
 	ANNOTLOOP: while(<ANNOT>){
         chomp;
-		$totalline_cnt+=1;
         if($head_comments) {
             # Check head comment lines
             if(/^#/) {
@@ -425,6 +424,7 @@ sub read_in_annot_vcf(){
                 }
             }
         }
+		$totalline_cnt+=1;
 		@temp=split(/\s+/,$_);
 		if($line_cnt == -1) {
 			@header_array = @temp;
@@ -455,12 +455,13 @@ sub read_in_annot_vcf(){
 			$annot_orig{$key1}[1]=$temp[$chr_col]; # chromosome # TODO: check that now having the "chr" in front doesn't affect this script
 			$annot_orig{$key1}[0]=$temp[$rsname_col]; # snp name
 			$line_cnt+=1;	
-			if($line_cnt%100000==0){
-				print STDERR "Read in $line_cnt SNP annotation lines\n";
-			}	
 		}
+        if($totalline_cnt%100000==0){
+            print STDERR "Read in $totalline_cnt SNP annotation lines.\r";
+        }	
 	}
-	print STDERR "# of SNPs in the annotation file = $totalline_cnt\n";
+    print STDERR "Read in $totalline_cnt SNP annotation lines.\n";
+	print STDERR "Total # of SNPs in the annotation file = $totalline_cnt (all populations)\n";
 	print STDERR "# of SNPs with allele frequency data for population $pop in annotation file = $line_cnt\n"; 
 }
 
@@ -501,18 +502,18 @@ sub read_in_vcf() {
 			copen(*EXTRA, ">$extra_info_file") or die "Can't open $extra_info_file for writing. $!";
 			print EXTRA "rs_name\tgenocall\tchr\tpos\tDP\tsumDP4\tMQ\tFQ\tAF1\n";
 		}
-		my $variantCallerDetected = 0; 
+		my $variantCallerDetected = 1; 
 		while(<IN>) {
 			if( $_ =~ /^#/ ){
 				if(/^##samtoolsVersion=/) {
 					$variantCaller eq "mpileup" or die "VCF appears to be produced by SAMtools, not $variantCaller as specified.\n";
 					$variantCallerDetected = 1;
 				}
-				if(/^##GATKCommandLine=<ID=UnifiedGenotyper,/) {
+				if(/^##GATKCommandLine.+<ID=UnifiedGenotyper,/) {
 					$variantCaller eq "unifiedgenotyper" or die "VCF appears to be produced by UnifiedGenotyper, not $variantCaller as specified.\n";
 					$variantCallerDetected = 1;
 				}
-				if(/^##GATKCommandLine=<ID=HaplotypeCaller,/) {
+				if(/^##GATKCommandLine=.+<ID=HaplotypeCaller,/) {
 					$variantCaller eq "haplotypecaller" or die "VCF appears to be produced by HaplotypeCaller, not $variantCaller as specified.\n";
 					$variantCallerDetected = 1;
 				}
