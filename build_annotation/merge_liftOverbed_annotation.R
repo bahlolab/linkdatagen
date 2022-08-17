@@ -51,19 +51,58 @@ hmu_1 <- hmu %>%
   #filter(physical_position_build38 < lead(physical_position_build38) | Chrom != lead(Chrom)) %>% 
   select(Chrom, physical_position_build38, everything())
 
-ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
-                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+ggplot(hmu_1, aes(x = physical_position_build37 - lag(physical_position_build37), 
+                  y = physical_position_build38 - lag(physical_position_build38))) +
   geom_point()
+
+ggplot(hmu_1, aes(x = physical_position_build37 - lag(physical_position_build37), 
+                  y = physical_position_build38 - lag(physical_position_build38))) +
+  geom_hex()
+
 
 ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
                   y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
   geom_point() +
-  xlim(0, 1e6) + ylim(-1e6, 1e6)
+  xlab("hg19 adjacent SNP physical difference") +
+  ylab("hg38 adjacent SNP physical difference")
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_point() +
+  xlim(0, 1e6) + ylim(-1e6, 1e6) +
+  xlab("hg19 adjacent SNP physical difference") +
+  ylab("hg38 adjacent SNP physical difference")
 
 ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
                   y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
   geom_hex() +
-  xlim(0, 1e6) + ylim(-1e6, 1e6)
+  xlim(-10, 1e6) + ylim(-1e6, 1e6)
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_hex() +
+  xlim(-10, 1e6) + ylim(-1e6, 1e6) +
+  scale_fill_gradient(trans = "log") +
+  xlab("hg19 adjacent SNP physical difference") +
+  ylab("hg38 adjacent SNP physical difference")
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), physical_position_build37 - lag(physical_position_build37), NA_real_), 
+                  y = if_else(Chrom == lag(Chrom), physical_position_build38 - lag(physical_position_build38), NA_real_))) +
+  geom_hex() +
+  xlim(-10, 1e5) + ylim(-1e5, 1e5) +
+  scale_fill_gradient(trans = "log") +
+  xlab("hg19 adjacent SNP physical difference") +
+  ylab("hg38 adjacent SNP physical difference")
+
+
+ggplot(hmu_1, aes(x = if_else(Chrom == lag(Chrom), abs(physical_position_build37 - lag(physical_position_build37) - 
+                                (physical_position_build38 - lag(physical_position_build38))) + 1, NA_real_))
+       ) +
+  xlab("hg19 to hg38 absolulte difference + 1") + 
+  geom_density() +
+  scale_y_log10() +
+  scale_x_log10()
+  
 
 # Filter out the bad ordering of SNPs. This is probably nowhere near the fastest
 # way to do this, but won't have to run this many times (hopefully).
