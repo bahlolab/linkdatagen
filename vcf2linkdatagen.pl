@@ -598,18 +598,12 @@ sub read_in_vcf() {
 							$skip = 1;
 					} #5 conditions for skipping: If it is an indel we skip, 
 				}
-				elsif ($variantCaller eq "unifiedgenotyper") {
-				
+				elsif ($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {
 					if (defined ($format_hash{"GT"}) && defined ($format_hash{"DP"})) {
-
 						if ($format_hash{"GT"} eq "./.") {
-
 							$skip = 1;
-
 						} else {
-
 						$DP = $format_hash{"DP"};
-
 							if( 
 								($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $DP < $mindepth || length($alt) > 1 )
 								|| (defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ)) {
@@ -617,10 +611,8 @@ sub read_in_vcf() {
 							} #5 conditions for skipping: If it is an indel we skip, 
 						}
 					} else {
-
 						$skip = 1;					
 					}
-					
 				}
 
 				#if the quality, depth or abs(FQ) is below our threshold we skip and if there is more than one alternate allele we skip.
@@ -631,7 +623,7 @@ sub read_in_vcf() {
 					if(!(defined($annot_orig{$key1}[1]))) { print LOG "!ANNOT*\t"; }
 					#if((defined($annot_orig{$key1}[1]))) { print LOG "!#####***\t".$key1."\t"; }
 					if($variantCaller eq "mpileup" && $totaldepth < $mindepth)  {print LOG "DEPTH*\t"; }
-					if($variantCaller eq "unifiedgenotyper" && $DP < $mindepth) {print LOG "DEPTH*\t"; }
+					if(($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") && $DP < $mindepth) {print LOG "DEPTH*\t"; }
 					if(length($alt) > 1) {print LOG "ALT*\t"; }
 					if(!defined($FQ)) {print LOG "FQ=nan\t"; } elsif (abs($FQ) < $min_FQ) {print LOG "FQ*\t"; }
 					if(defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ) {print LOG "GQ*\t"; }
@@ -687,7 +679,7 @@ sub read_in_vcf() {
 							print EXTRA "\t-1";
 						}
 						if($variantCaller eq "mpileup") {print EXTRA "\t".$chr."\t".$pos."\t".$totaldepth."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
-						if($variantCaller eq "unifiedgenotyper") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
+						if($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
 					}
 				}
 			}
