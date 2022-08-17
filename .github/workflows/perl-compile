@@ -29,8 +29,6 @@ jobs:
         uses: shogo82148/actions-setup-perl@v1
         with:
           perl-version: '5.22'
-      - name: Install DB_File
-        run: cpanm --force DB_File || cat /home/runner/.cpanm/work/*/build.log
       - name: Check compilation linkdatagen.pl
         run: perl -c linkdatagen.pl
       - name: Check compilation vcf2linkdatagen.pl
