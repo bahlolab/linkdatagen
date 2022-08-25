@@ -48,9 +48,10 @@ LICENSE
 
   -annotfile <annotfile> - <annotfile> is the file containing the annotation data
 
-  -variantCaller / -vc <mpileup | unifiedGenotyper | mp | ug> - The variant caller used in genotype calling, where
+  -variantCaller / -vc <mpileup | unifiedGenotyper | mp | ug | plink> - The variant caller used in genotype calling, where
     SAMtools mpileup use mpileup or mp (at present this only supports the older SAMtools 0.1.19, not 1.0.0+)
     GATK UnifiedGenotyper use unifiedGenotyper or ug
+	PLINK, SNP genotypes converted to vcf by PLINK, use plink
 
 =head2 Optional parameters: [default value in square brackets]
 
@@ -207,7 +208,7 @@ if(@ARGV > 1) {
 
 if(!(defined($variantCaller) || defined($vc))) {
 
-	print_usage("You must specify either -variantCaller [mpileup | unifiedGenotyper] or in short form -vc [mp | ug]");
+	print_usage("You must specify either -variantCaller [mpileup | unifiedGenotyper | plink] or in short form -vc [mp | ug]");
 }
 
 if (defined($variantCaller) && defined($vc) && $variantCaller != $vc) {
@@ -224,9 +225,10 @@ $variantCaller = lc $variantCaller;
 
 if (!($variantCaller eq "unifiedgenotyper" || $variantCaller eq "ug" || 
         $variantCaller eq "mpileup" || $variantCaller eq "mp" ||
-        $variantCaller eq "haplotypecaller" || $variantCaller eq "hc"
+        $variantCaller eq "haplotypecaller" || $variantCaller eq "hc" ||
+		$variantCaller eq "plink"
      )) {
-	print_usage("Must specify either -variantCaller [mpileup | unifiedGenotyper] or in short form -vc [mp | ug]");
+	print_usage("Must specify either -variantCaller [mpileup | unifiedGenotyper | plink] or in short form -vc [mp | ug]");
 } elsif ($variantCaller eq "ug") {
 	$variantCaller = "unifiedgenotyper";
 } elsif ($variantCaller eq "mp") {
@@ -504,6 +506,7 @@ sub read_in_vcf() {
 		}
 		my $variantCallerDetected = 1; 
 		while(<IN>) {
+			chomp;
 			if( $_ =~ /^#/ ){
 				if(/^##samtoolsVersion=/) {
 					$variantCaller eq "mpileup" or die "VCF appears to be produced by SAMtools, not $variantCaller as specified.\n";
@@ -517,6 +520,10 @@ sub read_in_vcf() {
 					$variantCaller eq "haplotypecaller" or die "VCF appears to be produced by HaplotypeCaller, not $variantCaller as specified.\n";
 					$variantCallerDetected = 1;
 				}
+				if(/^##source=PLINKv/) {
+					$variantCaller eq "plink" or die "VCF appears to be produced by PLINK, not $variantCaller as specified.\n";
+					$variantCallerDetected = 1;
+				}
 				if ( /^#[^#]/ ) {
 					unless($variantCallerDetected) {
 						warn "Variant detection algorithm was not found in the VCF header!\n";
@@ -528,7 +535,12 @@ sub read_in_vcf() {
 			my $skip = 0;
 			my @tmp = split(/\s+/,$_);		
 			#step one: is this a SNP in our annotation file?  Otherwise we can skip it.
-			my $chr = $1 if ($tmp[0] =~ /chr([\S]+)/);
+			my $chr = "NULL";
+			if($tmp[0] =~ /^chr(\d+)/) {
+				$chr = $1;
+			} elsif ($tmp[0] =~ /^(\d+)/) {
+				$chr = $1;
+			}
 			my $pos = $tmp[1];
 			my $key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
 			if(!(defined($annot_orig{$key1}[1]))) {
@@ -549,11 +561,12 @@ sub read_in_vcf() {
 				my $qual = $tmp[5];
 				my $info = $tmp[7];
 				my $format = $tmp[8];
+				# TODO: allow multiple sample reading here. pending delete
 				my $sample_1 = $tmp[9];
+				my @samples = @tmp[(9 .. $#tmp)];
 				#Now we grab bits from $info using pattern matching!
 
 				if ($variantCaller eq "mpileup") {
-
 					$DP = $1 if ($info =~ /DP=([\d]+)/);
 				}
 
@@ -567,10 +580,15 @@ sub read_in_vcf() {
 				}
 				# Extracting format field
 				my @formats = split(/:/, $format);
+				# TODO: pending delete:
 				my @formatinfo_1 = split(/:/, $sample_1);
+				my @formatinfo_all = map { split /:/ } @samples;
 				if(@formats != @formatinfo_1) { die "Sample info has different number of fields from sample data. FORMAT: $format INFO: $sample_1" };
 				my %format_hash; 
 				@format_hash{@formats} = @formatinfo_1;
+				my @format_hashes;
+				# @format_hashes = map { my %fh; @fh{@formats} = @$_; %fh } @formatinfo_all;
+
 							
 				#NOW TO CHECK THAT THINGS ARE TURNING OUT OK
 				if(defined($log)) {
