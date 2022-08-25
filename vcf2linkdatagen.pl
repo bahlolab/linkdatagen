@@ -451,7 +451,8 @@ sub read_in_annot_vcf(){
 		}
 		if( ( $temp[$freq_col] =~/\d+/ ) || ( $pop eq "ALL" ) ){	
 		#if($temp[$freq_col] =~/\d+/ || $temp[$freq_col] ne "NA"){	# I don't know why this is eq, changed to ne - MBjan2012		
-			$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
+			#$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
+            $key1 = $temp[$rsname_col]; # index by rs name now
 			$annot_orig{$key1}[4]=$temp[$freq_col]; #May 5 pops option will come later
             $annot_orig{$key1}[2] = $temp[$alleleA_col]."/".$temp[$alleleB_col];
 			$annot_orig{$key1}[1]=$temp[$chr_col]; # chromosome # TODO: check that now having the "chr" in front doesn't affect this script
@@ -542,7 +543,8 @@ sub read_in_vcf() {
 				$chr = $1;
 			}
 			my $pos = $tmp[1];
-			my $key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
+			#my $key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
+            my $key1 = $tmp[2]; # using rs name now
 			if(!(defined($annot_orig{$key1}[1]))) {
 				#print STDERR "skipping ".$key1."\n";
 				$skip = 1;
@@ -556,6 +558,7 @@ sub read_in_vcf() {
 				my $geno;
 				#Now we have $tmp[0]=CHROM, $tmp[1]=POS, $tmp[2]=ID, $tmp[3]=REF, $tmp[4]=ALT, $tmp[5]=QUAL, $tmp[6]=FILTER, $tmp[7]=INFO, $tmp[8]=FORMAT
 				$pos = $tmp[1];
+                my $rsname = $tmp[2];
 				my $ref = $tmp[3];
 				my $alt = $tmp[4];
 				my $qual = $tmp[5];
@@ -607,7 +610,8 @@ sub read_in_vcf() {
 				#else{
 					#print LOG "ACCEPT\t";
 					#}
-				$key1 = "chr".$chr."pos".$pos;  #since key is already taken - we use this value to locate the SNP if it is in our annotation file
+				# $key1 = "chr".$chr."pos".$pos;  #since key is already taken - we use this value to locate the SNP if it is in our annotation file
+				$key1 = $rsname;  # using rs name now 2022-08
 
 				if ($variantCaller eq "mpileup") {
 					if( !defined($FQ)
