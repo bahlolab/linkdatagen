@@ -248,6 +248,7 @@ $flipper{"N"}="N";
 my %genos_orig=();
 my %annot_orig=();
 my $num_files;
+my $c_sample = 0; # column for our output for when there are multiple samples in a VCF
 sub filter_missing_calls_vcf;
 
 if(defined($log)) {	
@@ -498,7 +499,6 @@ sub read_in_vcf() {
 		$num_files = 1;
 	}
 	print STDERR "\n";
-	my $c_sample = 0; # column for our output for when there are multiple samples in a VCF
 	my $samples_in_this_vcf = 1;
 	for($c = 0; $c < @vcf_ids; $c++) {
 		copen(*IN, '<', $vcf_ids[$c]) or die "Can't open $vcf_ids[$c]. $!";
@@ -687,6 +687,7 @@ sub read_in_vcf() {
 					for(my $c_offset = 0; $c_offset < @format_hashes; $c_offset++) {
 						#now assign a genotype for the called variant, based on the GT field
 						# Only SNV sites with one alternative should be present here if previous filters have worked
+						my $c_this = $c_sample + $c_offset;
 						my %single_format_hash = %{$format_hashes[$c_offset]};
 						if(defined($single_format_hash{GT})) {
 							$single_format_hash{GT} =~ /^([01])[\/|]([01])$/ && ($1 < 2) && ($2 < 2) or die "Bad GT field $single_format_hash{GT}.";
@@ -699,7 +700,7 @@ sub read_in_vcf() {
 							if(ord(substr($geno, 0, 1)) > ord(substr($geno, 1, 1))) {
 								$geno = substr($geno, 1, 1).substr($geno, 0, 1);  #put the hets in alphabetical order
 							}
-							$genos_orig{$key1}[$c_sample] = $geno;  #will be recoded to brlmm in another subroutine
+							$genos_orig{$key1}[$c_this] = $geno;  #will be recoded to brlmm in another subroutine
 							#print STDERR "assigning geno for person ".$c.", key ".$key1.":  ".$geno."\n";
 							if(defined($log)){
 								print LOG $geno."\n";
@@ -709,8 +710,8 @@ sub read_in_vcf() {
 						#now would be a good time to print to the "katfile";
 						if(defined($extra_info)) {
 							print EXTRA $annot_orig{$key1}[0]; # print rs name to Katherine's special file
-							if(defined($genos_orig{$key1}[$c_sample])) {
-								print EXTRA "\t".$genos_orig{$key1}[$c_sample];
+							if(defined($genos_orig{$key1}[$c_this])) {
+								print EXTRA "\t".$genos_orig{$key1}[$c_this];
 							}
 							else{
 								print EXTRA "\t-1";
@@ -734,7 +735,7 @@ sub write_brlmm(){
 	my @callarray=();
 	foreach $key (keys %genos_orig){
 		print OUT $annot_orig{$key}[0];
-		for($c = 0; $c < $num_files; $c++) {  #c<1 for now, multiple people to come
+		for($c = 0; $c < $c_sample; $c++) {  #c<1 for now, multiple people to come
 			print OUT "\t".$genos_orig{$key}[$c];
 		}
 		print OUT "\n";
@@ -754,7 +755,7 @@ my $snps_with_data=0;
 	print STDERR "In the recoding hash subroutine\n"; #ERROR CHECKING
 	foreach $key (keys %annot_orig){
 		$genocalls = 0;
-		for($c=0;$c<$num_files;$c++){
+		for($c=0; $c<$c_sample; $c++){
 			if(defined($genos_orig{$key}[$c])){
 				$genocalls = 1;
 			}
@@ -779,7 +780,7 @@ my $snps_with_data=0;
 	}
 	%annot_orig = %temp_hash_annot;
 	%genos_orig = %temp_hash_geno;
-	print STDERR "key_cnt =$key_cnt no of SNPs in annotation file.\n";
+	print STDERR "key_cnt = $key_cnt no of SNPs in annotation file.\n";
 	print STDERR "$snp_miss_cnt SNPs from the annotation file do not have any genotypes called in the vcf files in \n";
 	print STDERR "$snps_with_data SNPs that have both annotation and genotype data\n";
 }
@@ -797,7 +798,7 @@ my $c;
 		$recode_vcfgeno_hash{$alleleA.$alleleA}=0;
 		$recode_vcfgeno_hash{$alleleA.$alleleB}=1;
 		$recode_vcfgeno_hash{$alleleB.$alleleB}=2;
-		for($c=0; $c<$num_files; $c++) {
+		for($c=0; $c<$c_sample; $c++) {
 			if(defined($genos_orig{$key}[$c])) {
 				$temp = $genos_orig{$key}[$c];
 				$genos_orig{$key}[$c] = $recode_vcfgeno_hash{$genos_orig{$key}[$c]};
