@@ -95,6 +95,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
+use Data::Dumper;
 
 # Compressed file opening modules, allows script to work even if modules are not installed:
 my $perliogzip = 0;
@@ -497,6 +498,8 @@ sub read_in_vcf() {
 		$num_files = 1;
 	}
 	print STDERR "\n";
+	my $c_sample = 0; # column for our output for when there are multiple samples in a VCF
+	my $samples_in_this_vcf = 1;
 	for($c = 0; $c < @vcf_ids; $c++) {
 		copen(*IN, '<', $vcf_ids[$c]) or die "Can't open $vcf_ids[$c]. $!";
 		print STDERR "Reading in VCF file ".$vcf_ids[$c]."\n";
@@ -585,13 +588,12 @@ sub read_in_vcf() {
 				my @formats = split(/:/, $format);
 				# TODO: pending delete:
 				my @formatinfo_1 = split(/:/, $sample_1);
-				my @formatinfo_all = map { split /:/ } @samples;
+				my @formatinfo_all = map { my @field = split /:/; \@field } @samples; # array of arrays for all samples
+				$samples_in_this_vcf = scalar @formatinfo_all;
 				if(@formats != @formatinfo_1) { die "Sample info has different number of fields from sample data. FORMAT: $format INFO: $sample_1" };
 				my %format_hash; 
 				@format_hash{@formats} = @formatinfo_1;
-				my @format_hashes;
-				# @format_hashes = map { my %fh; @fh{@formats} = @$_; %fh } @formatinfo_all;
-
+				my @format_hashes = map { my %fh; @fh{@formats} = @$_; \%fh } @formatinfo_all;
 							
 				#NOW TO CHECK THAT THINGS ARE TURNING OUT OK
 				if(defined($log)) {
@@ -615,25 +617,32 @@ sub read_in_vcf() {
 
 				if ($variantCaller eq "mpileup") {
 					if( !defined($FQ)
-						|| ($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $totaldepth < $mindepth || length($alt) > 1 || abs($FQ) < $min_FQ)
-						|| (defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ)) {
+						|| ($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $totaldepth < $mindepth || length($alt) > 1 || abs($FQ) < $min_FQ)) {
 							$skip = 1;
 					} #5 conditions for skipping: If it is an indel we skip, 
+					foreach (@format_hashes) {
+						# skip low genotype quality
+						if(defined($_->{GQ}) && $_->{GQ} < $min_GQ) {
+							$skip = 1;
+						}
+					}
 				}
 				elsif ($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {
-					if (defined ($format_hash{"GT"}) && defined ($format_hash{"DP"})) {
-						if ($format_hash{"GT"} eq "./.") {
-							$skip = 1;
+					foreach my $fh (@format_hashes) {
+						if (defined ($fh->{"GT"}) && defined ($fh->{"DP"})) {
+							if ($fh->{"GT"} eq "./.") {
+								$skip = 1;
+							} else {
+								$DP = $fh->{"DP"};
+								if( 
+									($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $DP < $mindepth || length($alt) > 1 )
+									|| (defined($fh->{GQ}) && $fh->{GQ} < $min_GQ)) {
+										$skip = 1;
+								} #5 conditions for skipping: If it is an indel we skip, 
+							}
 						} else {
-						$DP = $format_hash{"DP"};
-							if( 
-								($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $DP < $mindepth || length($alt) > 1 )
-								|| (defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ)) {
-									$skip = 1;
-							} #5 conditions for skipping: If it is an indel we skip, 
+							$skip = 1;					
 						}
-					} else {
-						$skip = 1;					
 					}
 				}
 
@@ -648,7 +657,9 @@ sub read_in_vcf() {
 					if(($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") && $DP < $mindepth) {print LOG "DEPTH*\t"; }
 					if(length($alt) > 1) {print LOG "ALT*\t"; }
 					if(!defined($FQ)) {print LOG "FQ=nan\t"; } elsif (abs($FQ) < $min_FQ) {print LOG "FQ*\t"; }
-					if(defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ) {print LOG "GQ*\t"; }
+					foreach (@format_hashes) {
+						if(defined($_->{GQ}) && $_->{GQ} < $min_GQ) {print LOG "GQ*\t"; }
+					}
 					if($MQ < $min_MQ) {print LOG "MQ*\t"; }
 					print LOG "\n";
 				}
@@ -660,8 +671,10 @@ sub read_in_vcf() {
 					}  #If we have PV4 values defined we check that they are not below our thresholds.  If they are below, we skip.		
 				}
 				if($skip == 0) {
-					if(defined($format_hash{GT}) && $format_hash{GT} =~ /\.\/\./) {
-						$skip = 1;
+					foreach (@format_hashes) {
+						if(defined($_->{GT}) && $_->{GT} =~ /\.\/\./) {
+							$skip = 1;
+						}
 					}
 				}
 				if($skip ==0 ) {	 #only continue if we have not decided to skip this SNV
@@ -671,41 +684,46 @@ sub read_in_vcf() {
 						$skip = 1;
 						#print "Skipping genotype at chr ".$chr." position ".$pos." due to FQ=0\n";
 					}
-					#now assign a genotype for the called variant, based on the GT field
-					# Only SNV sites with one alternative should be present here if previous filters have worked
-					if(defined($format_hash{GT})) {
-						$format_hash{GT} =~ /^([01])[\/|]([01])$/ && ($1 < 2) && ($2 < 2) or die "Bad GT field $format_hash{GT}.";
-						$geno = ( $1 ? $alt : $ref ) . ( $2 ? $alt : $ref ); 
-					} else {
-						$geno = $ref.$ref;
-					}
+					for(my $c_offset = 0; $c_offset < @format_hashes; $c_offset++) {
+						#now assign a genotype for the called variant, based on the GT field
+						# Only SNV sites with one alternative should be present here if previous filters have worked
+						my %single_format_hash = %{$format_hashes[$c_offset]};
+						if(defined($single_format_hash{GT})) {
+							$single_format_hash{GT} =~ /^([01])[\/|]([01])$/ && ($1 < 2) && ($2 < 2) or die "Bad GT field $single_format_hash{GT}.";
+							$geno = ( $1 ? $alt : $ref ) . ( $2 ? $alt : $ref ); 
+						} else {
+							$geno = $ref.$ref;
+						}
 
-					if(defined($geno)){				
-						if(ord(substr($geno, 0, 1)) > ord(substr($geno, 1, 1))) {
-							$geno = substr($geno, 1, 1).substr($geno, 0, 1);  #put the hets in alphabetical order
+						if(defined($geno)){				
+							if(ord(substr($geno, 0, 1)) > ord(substr($geno, 1, 1))) {
+								$geno = substr($geno, 1, 1).substr($geno, 0, 1);  #put the hets in alphabetical order
+							}
+							$genos_orig{$key1}[$c_sample] = $geno;  #will be recoded to brlmm in another subroutine
+							#print STDERR "assigning geno for person ".$c.", key ".$key1.":  ".$geno."\n";
+							if(defined($log)){
+								print LOG $geno."\n";
+							}
+							undef($geno);  #for next loopy
 						}
-						$genos_orig{$key1}[$c] = $geno;  #will be recoded to brlmm in another subroutine
-						#print STDERR "assigning geno for person ".$c.", key ".$key1.":  ".$geno."\n";
-						if(defined($log)){
-							print LOG $geno."\n";
+						#now would be a good time to print to the "katfile";
+						if(defined($extra_info)) {
+							print EXTRA $annot_orig{$key1}[0]; # print rs name to Katherine's special file
+							if(defined($genos_orig{$key1}[$c_sample])) {
+								print EXTRA "\t".$genos_orig{$key1}[$c_sample];
+							}
+							else{
+								print EXTRA "\t-1";
+							}
+							if($variantCaller eq "mpileup") {print EXTRA "\t".$chr."\t".$pos."\t".$totaldepth."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
+							if($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
+							if($variantCaller eq "plink") {print EXTRA "\t".$chr."\t".$pos."\t\n"};
 						}
-						undef($geno);  #for next loopy
-					}
-					#now would be a good time to print to the "katfile";
-					if(defined($extra_info)) {
-						print EXTRA $annot_orig{$key1}[0]; # print rs name to Katherine's special file
-						if(defined($genos_orig{$key1}[$c])) {
-							print EXTRA "\t".$genos_orig{$key1}[$c];
-						}
-						else{
-							print EXTRA "\t-1";
-						}
-						if($variantCaller eq "mpileup") {print EXTRA "\t".$chr."\t".$pos."\t".$totaldepth."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
-						if($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
 					}
 				}
 			}
 		}
+		$c_sample += $samples_in_this_vcf;
 	}
 }
 	
