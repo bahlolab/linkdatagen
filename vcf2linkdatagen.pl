@@ -461,7 +461,7 @@ sub read_in_annot_vcf(){
 			$annot_orig{$key1}[0]=$temp[$rsname_col]; # snp name
 			$line_cnt+=1;	
 		}
-        if($totalline_cnt%100000==0){
+        if($totalline_cnt%100000==0 && -t STDERR){
             print STDERR "Read in $totalline_cnt SNP annotation lines.\r";
         }	
 	}
