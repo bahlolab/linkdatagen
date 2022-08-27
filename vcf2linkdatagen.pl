@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 my $script_revision = "3.1.0";
-my $last_changed_date = "2022-08-09 16:52 AEST";
+my $last_changed_date = "2022-08-27 16:52 AEST";
 
 #This is a companion script to linkdatagen.pl, to be used on .vcf or .vcf-like files.
 #This script creates a brlmm genotype call file from genotypes called from MPS data
