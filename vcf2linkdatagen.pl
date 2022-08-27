@@ -73,6 +73,12 @@ LICENSE
 
   -extra_info : If defined, vcf2linkdatagen will print out a file for each VCF, vcf_ID_callswithextrainfo.  This file contains the fields rs_name, genocall, chr, pos, DP, sumDP4, MQ, FQ and AF1 for each called genotype
 
+  -store_annotation file:
+    Generate a storable file of the annotation for the specified population. The extension .storable is added to the file path. This file may be passed in subsequent runs to -annotfile. 
+
+  -rs_index:
+    If set, annotation is indexed by SNP rs name instead of chromosome-position.
+
 =head2 Thresholds for genotype calling: [default value in square brackets]
 
 A vcf genotype call can be converted into a brlmm genotype call provided that the values in the information field of the vcf file do not fall below the following thresholds:
@@ -131,6 +137,7 @@ my $extra_info;
 my $variantCaller;
 my $vc;
 my $store_annotation;
+my $rs_index;
 my $copen_gz_warn;
 
 GetOptions(
@@ -152,6 +159,7 @@ GetOptions(
 	"pop=s"=>\$pop,
 	"extra_info"=>\$extra_info,
 	"variantCaller=s"=>\$variantCaller, 
+    "rs_index"=>\$rs_index,
     "store_annotation=s"=>\$store_annotation,
 	"vc=s"=>\$vc ) or
 	print_usage("Error in parsing options: unknown option/s given (see top of this message for more details).");
@@ -464,8 +472,11 @@ sub read_in_annot_vcf(){
 		}
 		if( ( $temp[$freq_col] =~/\d+/ ) || ( $pop eq "ALL" ) ){	
 		#if($temp[$freq_col] =~/\d+/ || $temp[$freq_col] ne "NA"){	# I don't know why this is eq, changed to ne - MBjan2012		
-			#$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
-            $key1 = $temp[$rsname_col]; # index by rs name now
+			if($rs_index) {
+				$key1 = $temp[$rsname_col]; # index by rs name
+			} else {
+				$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
+			}
 			$annot_orig{$key1}[4]=$temp[$freq_col]; #May 5 pops option will come later
             $annot_orig{$key1}[2] = $temp[$alleleA_col]."/".$temp[$alleleB_col];
 			$annot_orig{$key1}[1]=$temp[$chr_col]; # chromosome # TODO: check that now having the "chr" in front doesn't affect this script
@@ -486,6 +497,7 @@ sub read_in_annot_vcf(){
         $annot_storage{script_revision} = $script_revision;
         $annot_storage{pop} = $pop;
         $annot_storage{script} = "vcf2linkdatagen.pl";
+        $annot_storage{rs_index} = $rs_index;
         $annot_storage{annot_orig} = \%annot_orig;
         store(\%annot_storage, "$store_annotation.storable") or 
             die "Can't store %annot_storage in ${store_annotation}.storable!\n";
@@ -500,6 +512,9 @@ sub read_in_annot_storable() {
     if(!defined($annot_storage->{script}) || $annot_storage->{script} ne "vcf2linkdatagen.pl") {
         print_usage("Storable annotation does not appear to be produced by vcf2linkdatagen.");
     }
+	if($annot_storage->{rs_index} ne $rs_index) {
+		print_usage("rs_index setting does not match storable annotation.")
+	}
     # check version of Perl script
     my @script_rev = $script_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
     my $storable_revision = $annot_storage->{script_revision};
@@ -591,8 +606,12 @@ sub read_in_vcf() {
 				$chr = $1;
 			}
 			my $pos = $tmp[1];
-			#my $key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
-            my $key1 = $tmp[2]; # using rs name now
+			my $key1;
+			if($rs_index) {
+				$key1 = $tmp[2]; # using rs name
+			} else {
+				$key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
+			}
 			if(!(defined($annot_orig{$key1}[1]))) {
 				#print STDERR "skipping ".$key1."\n";
 				$skip = 1;
