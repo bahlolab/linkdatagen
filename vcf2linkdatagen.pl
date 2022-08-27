@@ -96,6 +96,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
+use Storable;
 
 # Compressed file opening modules, allows script to work even if modules are not installed:
 my $perliogzip = 0;
@@ -129,6 +130,7 @@ my $help;
 my $extra_info;
 my $variantCaller;
 my $vc;
+my $store_annotation;
 my $copen_gz_warn;
 
 GetOptions(
@@ -150,6 +152,7 @@ GetOptions(
 	"pop=s"=>\$pop,
 	"extra_info"=>\$extra_info,
 	"variantCaller=s"=>\$variantCaller, 
+    "store_annotation=s"=>\$store_annotation,
 	"vc=s"=>\$vc ) or
 	print_usage("Error in parsing options: unknown option/s given (see top of this message for more details).");
 
@@ -306,7 +309,6 @@ if( !defined($pop) ) {
 	POPCOL: $popcol = $pop; 
 }
 
-copen(*ANNOT, '<', $annotfile) || die "Can't open annotation file $annotfile. $!";
 
 #VCF2LINKDATAGEN.PL MAIN
 #------------------------------------------------------------------------------------
@@ -314,7 +316,16 @@ print STDERR "Started at ";
 &print_time();
 print STDERR "\n\n";
 #First we must read in the annotation file
-&read_in_annot_vcf();
+#TODO: allow reading in saved annot file
+if($annotfile =~ /\.storable$/) {
+    if($store_annotation) {
+        print_usage("Cannot set -store_annotation while the annotation input is a storable.");
+    }
+    &read_in_annot_storable();
+} else {
+    copen(*ANNOT, '<', $annotfile) || die "Can't open annotation file $annotfile. $!";
+    &read_in_annot_vcf();
+}
 print STDERR "-----------------------------------------------------------------\n";
 
 #Then we read in the genotype data
@@ -405,7 +416,7 @@ sub read_in_annot_vcf(){
                 if(/^# Minimum LINKDATAGEN revision: (\d+)$/) {
                     if(997 < $1) {
                         # this script is too old
-                        print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)"); 
+                        print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)."); 
                     }
                     $annot_version_check = 1;
                 }
@@ -468,6 +479,40 @@ sub read_in_annot_vcf(){
     print STDERR "Read in $totalline_cnt SNP annotation lines.\n";
 	print STDERR "Total # of SNPs in the annotation file = $totalline_cnt (all populations)\n";
 	print STDERR "# of SNPs with allele frequency data for population $pop in annotation file = $line_cnt\n"; 
+    if($store_annotation) {
+        # Save the annotation file and exit
+        # TODO: also save version number and population so that we can check when reading back in.
+        my %annot_storage = ();
+        $annot_storage{script_revision} = $script_revision;
+        $annot_storage{pop} = $pop;
+        $annot_storage{script} = "vcf2linkdatagen.pl";
+        $annot_storage{annot_orig} = \%annot_orig;
+        store(\%annot_storage, "$store_annotation.storable") or 
+            die "Can't store %annot_storage in ${store_annotation}.storable!\n";
+        warn "Annotation successfully stored.\n";
+        exit 0;
+    }
+}
+
+sub read_in_annot_storable() {
+    warn "Reading in annotation in storeable format from file $annotfile.\n";
+    my $annot_storage = retrieve($annotfile) or die "Cannot read in annotation storable $annotfile\n"; #hashref
+    if(!defined($annot_storage->{script}) || $annot_storage->{script} ne "vcf2linkdatagen.pl") {
+        print_usage("Storable annotation does not appear to be produced by vcf2linkdatagen.");
+    }
+    # check version of Perl script
+    my @script_rev = $script_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
+    my $storable_revision = $annot_storage->{script_revision};
+    my @storable_rev = $storable_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
+    if($script_rev[0] != $storable_rev[0] || $script_rev[1] != $storable_rev[1] || $script_rev[2] != $storable_rev[2]) {
+        print_usage("Storeable annotation version (v$storable_revision) does not match Perl script version (v$script_revision)."); 
+    }
+    # check population matches
+    if($pop ne $annot_storage->{pop}) {
+        die "Specified population $pop does not match storable population $annot_storage->{pop} in $annotfile.\n";
+    }
+    %annot_orig = %{$annot_storage->{annot_orig}};
+	print STDERR "# of SNPs with allele frequency data for population $pop in annotation file = ", scalar(keys %annot_orig),"\n"; 
 }
 
 sub read_in_vcf() {
