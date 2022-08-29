@@ -650,13 +650,11 @@ sub read_in_vcf() {
 				}
 				# Extracting format field
 				my @formats = split(/:/, $format);
-				# TODO: pending delete:
-				my @formatinfo_1 = split(/:/, $sample_1);
 				my @formatinfo_all = map { my @field = split /:/; \@field } @samples; # array of arrays for all samples
 				$samples_in_this_vcf = scalar @formatinfo_all;
-				if(@formats != @formatinfo_1) { die "Sample info has different number of fields from sample data. FORMAT: $format INFO: $sample_1" };
-				my %format_hash; 
-				@format_hash{@formats} = @formatinfo_1;
+				for(my $ii = 0; $ii < @formatinfo_all; $ii++) {
+					if(@formats < @{$formatinfo_all[$ii]}) { die "Sample format has less fields than sample data. FORMAT: $format INFO: $samples[$ii]." };
+				}
 				my @format_hashes = map { my %fh; @fh{@formats} = @$_; \%fh } @formatinfo_all;
 							
 				#NOW TO CHECK THAT THINGS ARE TURNING OUT OK
