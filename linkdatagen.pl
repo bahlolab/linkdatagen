@@ -1745,7 +1745,7 @@ my $den;
 					}
 					$genos_orig{$temp[$SNP_col]}[$k]=$temp[$alleleA_col].$temp[$alleleB_col]; # genos_orig has for each SNP an entry for each genotype in the order of the samples in the whichSamplesFile
 					$line_cnt+=1;
-					if($line_cnt%100000==0){
+					if($line_cnt%100000==0 && -t STDOUT){
 						print "Read in $line_cnt genotyping lines of file $filename\r";
 					}
 				}
@@ -1881,8 +1881,7 @@ my $den;
 #						$j+=1;		#appears like pointless code, what's it doing here?
 						$line_cnt+=1;
 
-						if($line_cnt%100000==0){
-
+						if($line_cnt%100000==0 && -t STDOUT){
 							print "Read in $line_cnt genotyping lines of file $filename\r";
 						}
 					}
@@ -1965,7 +1964,7 @@ my $den;
 #						$j+=1;		#appears like pointless code, why not use $i since it's in the loop??
 					}
 					$line_cnt+=1;
-					if($line_cnt%100000==0){
+					if($line_cnt%100000==0 && -t STDOUT){
 						print "Read in $line_cnt genotyping lines\r";
 					}
 				}
@@ -1996,7 +1995,7 @@ my $den;
 #					$j+=1;		#appears like pointless code, why not use $i since it's in the loop??
 				}
 				$line_cnt+=1;
-				if($line_cnt%100000==0){
+				if($line_cnt%100000==0 && -t STDOUT){
 					print "Read in $line_cnt genotyping lines\r";
 				}
 			}
@@ -2292,7 +2291,7 @@ sub read_in_annot_illumina_legacy{
 				}
 				print OUT5 "\n";
 			}
-			if($line_cnt%100000==0){
+			if($line_cnt%100000==0 && -t STDOUT){
 				print "$line_cnt SNPs so far selected from the annotation file...\r";
 			}
 		}
@@ -2498,7 +2497,7 @@ my @header_array;
 				}
 				print OUT5 "\n";
 			}
-			if($line_cnt%100000==0){
+			if($line_cnt%100000==0 && -t STDOUT){
 				print "$line_cnt SNPs so far selected from the annotation file...\r";
 			}
 		}

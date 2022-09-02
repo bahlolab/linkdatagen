@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 my $script_revision = "3.1.0";
-my $last_changed_date = "2022-08-09 16:52 AEST";
+my $last_changed_date = "2022-08-27 16:52 AEST";
 
 #This is a companion script to linkdatagen.pl, to be used on .vcf or .vcf-like files.
 #This script creates a brlmm genotype call file from genotypes called from MPS data
@@ -48,9 +48,10 @@ LICENSE
 
   -annotfile <annotfile> - <annotfile> is the file containing the annotation data
 
-  -variantCaller / -vc <mpileup | unifiedGenotyper | mp | ug> - The variant caller used in genotype calling, where
+  -variantCaller / -vc <mpileup | unifiedGenotyper | mp | ug | plink> - The variant caller used in genotype calling, where
     SAMtools mpileup use mpileup or mp (at present this only supports the older SAMtools 0.1.19, not 1.0.0+)
     GATK UnifiedGenotyper use unifiedGenotyper or ug
+	PLINK, SNP genotypes converted to vcf by PLINK, use plink
 
 =head2 Optional parameters: [default value in square brackets]
 
@@ -71,6 +72,12 @@ LICENSE
   -missingness [1] the maximum proportion of missing genotype calls for a SNP to be output to the brlmm file.
 
   -extra_info : If defined, vcf2linkdatagen will print out a file for each VCF, vcf_ID_callswithextrainfo.  This file contains the fields rs_name, genocall, chr, pos, DP, sumDP4, MQ, FQ and AF1 for each called genotype
+
+  -store_annotation file:
+    Generate a storable file of the annotation for the specified population. The extension .storable is added to the file path. This file may be passed in subsequent runs to -annotfile. 
+
+  -rs_index:
+    If set, annotation is indexed by SNP rs name instead of chromosome-position.
 
 =head2 Thresholds for genotype calling: [default value in square brackets]
 
@@ -94,6 +101,8 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
+use Data::Dumper;
+use Storable;
 
 # Compressed file opening modules, allows script to work even if modules are not installed:
 my $perliogzip = 0;
@@ -127,6 +136,8 @@ my $help;
 my $extra_info;
 my $variantCaller;
 my $vc;
+my $store_annotation;
+my $rs_index;
 my $copen_gz_warn;
 
 GetOptions(
@@ -148,6 +159,8 @@ GetOptions(
 	"pop=s"=>\$pop,
 	"extra_info"=>\$extra_info,
 	"variantCaller=s"=>\$variantCaller, 
+    "rs_index"=>\$rs_index,
+    "store_annotation=s"=>\$store_annotation,
 	"vc=s"=>\$vc ) or
 	print_usage("Error in parsing options: unknown option/s given (see top of this message for more details).");
 
@@ -207,7 +220,7 @@ if(@ARGV > 1) {
 
 if(!(defined($variantCaller) || defined($vc))) {
 
-	print_usage("You must specify either -variantCaller [mpileup | unifiedGenotyper] or in short form -vc [mp | ug]");
+	print_usage("You must specify either -variantCaller [mpileup | unifiedGenotyper | plink] or in short form -vc [mp | ug]");
 }
 
 if (defined($variantCaller) && defined($vc) && $variantCaller != $vc) {
@@ -224,9 +237,10 @@ $variantCaller = lc $variantCaller;
 
 if (!($variantCaller eq "unifiedgenotyper" || $variantCaller eq "ug" || 
         $variantCaller eq "mpileup" || $variantCaller eq "mp" ||
-        $variantCaller eq "haplotypecaller" || $variantCaller eq "hc"
+        $variantCaller eq "haplotypecaller" || $variantCaller eq "hc" ||
+		$variantCaller eq "plink"
      )) {
-	print_usage("Must specify either -variantCaller [mpileup | unifiedGenotyper] or in short form -vc [mp | ug]");
+	print_usage("Must specify either -variantCaller [mpileup | unifiedGenotyper | plink] or in short form -vc [mp | ug]");
 } elsif ($variantCaller eq "ug") {
 	$variantCaller = "unifiedgenotyper";
 } elsif ($variantCaller eq "mp") {
@@ -245,6 +259,7 @@ $flipper{"N"}="N";
 my %genos_orig=();
 my %annot_orig=();
 my $num_files;
+my $c_sample = 0; # column for our output for when there are multiple samples in a VCF
 sub filter_missing_calls_vcf;
 
 if(defined($log)) {	
@@ -302,7 +317,6 @@ if( !defined($pop) ) {
 	POPCOL: $popcol = $pop; 
 }
 
-copen(*ANNOT, '<', $annotfile) || die "Can't open annotation file $annotfile. $!";
 
 #VCF2LINKDATAGEN.PL MAIN
 #------------------------------------------------------------------------------------
@@ -310,7 +324,16 @@ print STDERR "Started at ";
 &print_time();
 print STDERR "\n\n";
 #First we must read in the annotation file
-&read_in_annot_vcf();
+#TODO: allow reading in saved annot file
+if($annotfile =~ /\.storable$/) {
+    if($store_annotation) {
+        print_usage("Cannot set -store_annotation while the annotation input is a storable.");
+    }
+    &read_in_annot_storable();
+} else {
+    copen(*ANNOT, '<', $annotfile) || die "Can't open annotation file $annotfile. $!";
+    &read_in_annot_vcf();
+}
 print STDERR "-----------------------------------------------------------------\n";
 
 #Then we read in the genotype data
@@ -401,7 +424,7 @@ sub read_in_annot_vcf(){
                 if(/^# Minimum LINKDATAGEN revision: (\d+)$/) {
                     if(997 < $1) {
                         # this script is too old
-                        print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)"); 
+                        print_usage("Annotation file is requires newer version of LINKDATAGEN. Make sure you have not changed the annotation header or contact the developers. (SVN Revision $1 required, but have $script_revision)."); 
                     }
                     $annot_version_check = 1;
                 }
@@ -449,20 +472,62 @@ sub read_in_annot_vcf(){
 		}
 		if( ( $temp[$freq_col] =~/\d+/ ) || ( $pop eq "ALL" ) ){	
 		#if($temp[$freq_col] =~/\d+/ || $temp[$freq_col] ne "NA"){	# I don't know why this is eq, changed to ne - MBjan2012		
-			$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
+			if($rs_index) {
+				$key1 = $temp[$rsname_col]; # index by rs name
+			} else {
+				$key1 = $temp[$chr_col]."pos".$temp[$physical_pos_col];  #key for hash will change
+			}
 			$annot_orig{$key1}[4]=$temp[$freq_col]; #May 5 pops option will come later
             $annot_orig{$key1}[2] = $temp[$alleleA_col]."/".$temp[$alleleB_col];
 			$annot_orig{$key1}[1]=$temp[$chr_col]; # chromosome # TODO: check that now having the "chr" in front doesn't affect this script
 			$annot_orig{$key1}[0]=$temp[$rsname_col]; # snp name
 			$line_cnt+=1;	
 		}
-        if($totalline_cnt%100000==0){
+        if($totalline_cnt%100000==0 && -t STDERR){
             print STDERR "Read in $totalline_cnt SNP annotation lines.\r";
         }	
 	}
     print STDERR "Read in $totalline_cnt SNP annotation lines.\n";
 	print STDERR "Total # of SNPs in the annotation file = $totalline_cnt (all populations)\n";
 	print STDERR "# of SNPs with allele frequency data for population $pop in annotation file = $line_cnt\n"; 
+    if($store_annotation) {
+        # Save the annotation file and exit
+        # TODO: also save version number and population so that we can check when reading back in.
+        my %annot_storage = ();
+        $annot_storage{script_revision} = $script_revision;
+        $annot_storage{pop} = $pop;
+        $annot_storage{script} = "vcf2linkdatagen.pl";
+        $annot_storage{rs_index} = $rs_index;
+        $annot_storage{annot_orig} = \%annot_orig;
+        store(\%annot_storage, "$store_annotation.storable") or 
+            die "Can't store %annot_storage in ${store_annotation}.storable!\n";
+        warn "Annotation successfully stored.\n";
+        exit 0;
+    }
+}
+
+sub read_in_annot_storable() {
+    warn "Reading in annotation in storeable format from file $annotfile.\n";
+    my $annot_storage = retrieve($annotfile) or die "Cannot read in annotation storable $annotfile\n"; #hashref
+    if(!defined($annot_storage->{script}) || $annot_storage->{script} ne "vcf2linkdatagen.pl") {
+        print_usage("Storable annotation does not appear to be produced by vcf2linkdatagen.");
+    }
+	if($annot_storage->{rs_index} ne $rs_index) {
+		print_usage("rs_index setting does not match storable annotation.")
+	}
+    # check version of Perl script
+    my @script_rev = $script_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
+    my $storable_revision = $annot_storage->{script_revision};
+    my @storable_rev = $storable_revision =~ /^(\d+)\.(\d+)\.(\d+)$/;
+    if($script_rev[0] != $storable_rev[0] || $script_rev[1] != $storable_rev[1] || $script_rev[2] != $storable_rev[2]) {
+        print_usage("Storeable annotation version (v$storable_revision) does not match Perl script version (v$script_revision)."); 
+    }
+    # check population matches
+    if($pop ne $annot_storage->{pop}) {
+        die "Specified population $pop does not match storable population $annot_storage->{pop} in $annotfile.\n";
+    }
+    %annot_orig = %{$annot_storage->{annot_orig}};
+	print STDERR "# of SNPs with allele frequency data for population $pop in annotation file = ", scalar(keys %annot_orig),"\n"; 
 }
 
 sub read_in_vcf() {
@@ -494,6 +559,7 @@ sub read_in_vcf() {
 		$num_files = 1;
 	}
 	print STDERR "\n";
+	my $samples_in_this_vcf = 1;
 	for($c = 0; $c < @vcf_ids; $c++) {
 		copen(*IN, '<', $vcf_ids[$c]) or die "Can't open $vcf_ids[$c]. $!";
 		print STDERR "Reading in VCF file ".$vcf_ids[$c]."\n";
@@ -504,6 +570,7 @@ sub read_in_vcf() {
 		}
 		my $variantCallerDetected = 1; 
 		while(<IN>) {
+			chomp;
 			if( $_ =~ /^#/ ){
 				if(/^##samtoolsVersion=/) {
 					$variantCaller eq "mpileup" or die "VCF appears to be produced by SAMtools, not $variantCaller as specified.\n";
@@ -517,6 +584,10 @@ sub read_in_vcf() {
 					$variantCaller eq "haplotypecaller" or die "VCF appears to be produced by HaplotypeCaller, not $variantCaller as specified.\n";
 					$variantCallerDetected = 1;
 				}
+				if(/^##source=PLINKv/) {
+					$variantCaller eq "plink" or die "VCF appears to be produced by PLINK, not $variantCaller as specified.\n";
+					$variantCallerDetected = 1;
+				}
 				if ( /^#[^#]/ ) {
 					unless($variantCallerDetected) {
 						warn "Variant detection algorithm was not found in the VCF header!\n";
@@ -528,9 +599,19 @@ sub read_in_vcf() {
 			my $skip = 0;
 			my @tmp = split(/\s+/,$_);		
 			#step one: is this a SNP in our annotation file?  Otherwise we can skip it.
-			my $chr = $1 if ($tmp[0] =~ /chr([\S]+)/);
+			my $chr = "NULL";
+			if($tmp[0] =~ /^chr(\d+)/) {
+				$chr = $1;
+			} elsif ($tmp[0] =~ /^(\d+)/) {
+				$chr = $1;
+			}
 			my $pos = $tmp[1];
-			my $key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
+			my $key1;
+			if($rs_index) {
+				$key1 = $tmp[2]; # using rs name
+			} else {
+				$key1 = "chr".$chr."pos".$pos;  #we use this value to locate the SNP if it is in our annotation file
+			}
 			if(!(defined($annot_orig{$key1}[1]))) {
 				#print STDERR "skipping ".$key1."\n";
 				$skip = 1;
@@ -544,16 +625,18 @@ sub read_in_vcf() {
 				my $geno;
 				#Now we have $tmp[0]=CHROM, $tmp[1]=POS, $tmp[2]=ID, $tmp[3]=REF, $tmp[4]=ALT, $tmp[5]=QUAL, $tmp[6]=FILTER, $tmp[7]=INFO, $tmp[8]=FORMAT
 				$pos = $tmp[1];
+                my $rsname = $tmp[2];
 				my $ref = $tmp[3];
 				my $alt = $tmp[4];
 				my $qual = $tmp[5];
 				my $info = $tmp[7];
 				my $format = $tmp[8];
+				# TODO: allow multiple sample reading here. pending delete
 				my $sample_1 = $tmp[9];
+				my @samples = @tmp[(9 .. $#tmp)];
 				#Now we grab bits from $info using pattern matching!
 
 				if ($variantCaller eq "mpileup") {
-
 					$DP = $1 if ($info =~ /DP=([\d]+)/);
 				}
 
@@ -567,10 +650,12 @@ sub read_in_vcf() {
 				}
 				# Extracting format field
 				my @formats = split(/:/, $format);
-				my @formatinfo_1 = split(/:/, $sample_1);
-				if(@formats != @formatinfo_1) { die "Sample info has different number of fields from sample data. FORMAT: $format INFO: $sample_1" };
-				my %format_hash; 
-				@format_hash{@formats} = @formatinfo_1;
+				my @formatinfo_all = map { my @field = split /:/; \@field } @samples; # array of arrays for all samples
+				$samples_in_this_vcf = scalar @formatinfo_all;
+				for(my $ii = 0; $ii < @formatinfo_all; $ii++) {
+					if(@formats < @{$formatinfo_all[$ii]}) { die "Sample format has less fields than sample data. FORMAT: $format INFO: $samples[$ii]." };
+				}
+				my @format_hashes = map { my %fh; @fh{@formats} = @$_; \%fh } @formatinfo_all;
 							
 				#NOW TO CHECK THAT THINGS ARE TURNING OUT OK
 				if(defined($log)) {
@@ -589,29 +674,37 @@ sub read_in_vcf() {
 				#else{
 					#print LOG "ACCEPT\t";
 					#}
-				$key1 = "chr".$chr."pos".$pos;  #since key is already taken - we use this value to locate the SNP if it is in our annotation file
+				# $key1 = "chr".$chr."pos".$pos;  #since key is already taken - we use this value to locate the SNP if it is in our annotation file
+				$key1 = $rsname;  # using rs name now 2022-08
 
 				if ($variantCaller eq "mpileup") {
 					if( !defined($FQ)
-						|| ($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $totaldepth < $mindepth || length($alt) > 1 || abs($FQ) < $min_FQ)
-						|| (defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ)) {
+						|| ($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $totaldepth < $mindepth || length($alt) > 1 || abs($FQ) < $min_FQ)) {
 							$skip = 1;
 					} #5 conditions for skipping: If it is an indel we skip, 
+					foreach (@format_hashes) {
+						# skip low genotype quality
+						if(defined($_->{GQ}) && $_->{GQ} < $min_GQ) {
+							$skip = 1;
+						}
+					}
 				}
 				elsif ($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {
-					if (defined ($format_hash{"GT"}) && defined ($format_hash{"DP"})) {
-						if ($format_hash{"GT"} eq "./.") {
-							$skip = 1;
+					foreach my $fh (@format_hashes) {
+						if (defined ($fh->{"GT"}) && defined ($fh->{"DP"})) {
+							if ($fh->{"GT"} eq "./.") {
+								$skip = 1;
+							} else {
+								$DP = $fh->{"DP"};
+								if( 
+									($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $DP < $mindepth || length($alt) > 1 )
+									|| (defined($fh->{GQ}) && $fh->{GQ} < $min_GQ)) {
+										$skip = 1;
+								} #5 conditions for skipping: If it is an indel we skip, 
+							}
 						} else {
-						$DP = $format_hash{"DP"};
-							if( 
-								($tmp[7] =~ /INDEL/ || $MQ < $min_MQ || $DP < $mindepth || length($alt) > 1 )
-								|| (defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ)) {
-									$skip = 1;
-							} #5 conditions for skipping: If it is an indel we skip, 
+							$skip = 1;					
 						}
-					} else {
-						$skip = 1;					
 					}
 				}
 
@@ -626,7 +719,9 @@ sub read_in_vcf() {
 					if(($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") && $DP < $mindepth) {print LOG "DEPTH*\t"; }
 					if(length($alt) > 1) {print LOG "ALT*\t"; }
 					if(!defined($FQ)) {print LOG "FQ=nan\t"; } elsif (abs($FQ) < $min_FQ) {print LOG "FQ*\t"; }
-					if(defined($format_hash{GQ}) && $format_hash{GQ} < $min_GQ) {print LOG "GQ*\t"; }
+					foreach (@format_hashes) {
+						if(defined($_->{GQ}) && $_->{GQ} < $min_GQ) {print LOG "GQ*\t"; }
+					}
 					if($MQ < $min_MQ) {print LOG "MQ*\t"; }
 					print LOG "\n";
 				}
@@ -638,8 +733,10 @@ sub read_in_vcf() {
 					}  #If we have PV4 values defined we check that they are not below our thresholds.  If they are below, we skip.		
 				}
 				if($skip == 0) {
-					if(defined($format_hash{GT}) && $format_hash{GT} =~ /\.\/\./) {
-						$skip = 1;
+					foreach (@format_hashes) {
+						if(defined($_->{GT}) && $_->{GT} =~ /\.\/\./) {
+							$skip = 1;
+						}
 					}
 				}
 				if($skip ==0 ) {	 #only continue if we have not decided to skip this SNV
@@ -649,41 +746,47 @@ sub read_in_vcf() {
 						$skip = 1;
 						#print "Skipping genotype at chr ".$chr." position ".$pos." due to FQ=0\n";
 					}
-					#now assign a genotype for the called variant, based on the GT field
-					# Only SNV sites with one alternative should be present here if previous filters have worked
-					if(defined($format_hash{GT})) {
-						$format_hash{GT} =~ /^([01])[\/|]([01])$/ && ($1 < 2) && ($2 < 2) or die "Bad GT field $format_hash{GT}.";
-						$geno = ( $1 ? $alt : $ref ) . ( $2 ? $alt : $ref ); 
-					} else {
-						$geno = $ref.$ref;
-					}
+					for(my $c_offset = 0; $c_offset < @format_hashes; $c_offset++) {
+						#now assign a genotype for the called variant, based on the GT field
+						# Only SNV sites with one alternative should be present here if previous filters have worked
+						my $c_this = $c_sample + $c_offset;
+						my %single_format_hash = %{$format_hashes[$c_offset]};
+						if(defined($single_format_hash{GT})) {
+							$single_format_hash{GT} =~ /^([01])[\/|]([01])$/ && ($1 < 2) && ($2 < 2) or die "Bad GT field $single_format_hash{GT}.";
+							$geno = ( $1 ? $alt : $ref ) . ( $2 ? $alt : $ref ); 
+						} else {
+							$geno = $ref.$ref;
+						}
 
-					if(defined($geno)){				
-						if(ord(substr($geno, 0, 1)) > ord(substr($geno, 1, 1))) {
-							$geno = substr($geno, 1, 1).substr($geno, 0, 1);  #put the hets in alphabetical order
+						if(defined($geno)){				
+							if(ord(substr($geno, 0, 1)) > ord(substr($geno, 1, 1))) {
+								$geno = substr($geno, 1, 1).substr($geno, 0, 1);  #put the hets in alphabetical order
+							}
+							$genos_orig{$key1}[$c_this] = $geno;  #will be recoded to brlmm in another subroutine
+							#print STDERR "assigning geno for person ".$c.", key ".$key1.":  ".$geno."\n";
+							if(defined($log)){
+								print LOG $geno."\n";
+							}
+							undef($geno);  #for next loopy
 						}
-						$genos_orig{$key1}[$c] = $geno;  #will be recoded to brlmm in another subroutine
-						#print STDERR "assigning geno for person ".$c.", key ".$key1.":  ".$geno."\n";
-						if(defined($log)){
-							print LOG $geno."\n";
+						#now would be a good time to print to the "katfile";
+						if(defined($extra_info)) {
+							print EXTRA $annot_orig{$key1}[0]; # print rs name to Katherine's special file
+							if(defined($genos_orig{$key1}[$c_this])) {
+								print EXTRA "\t".$genos_orig{$key1}[$c_this];
+							}
+							else{
+								print EXTRA "\t-1";
+							}
+							if($variantCaller eq "mpileup") {print EXTRA "\t".$chr."\t".$pos."\t".$totaldepth."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
+							if($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
+							if($variantCaller eq "plink") {print EXTRA "\t".$chr."\t".$pos."\t\n"};
 						}
-						undef($geno);  #for next loopy
-					}
-					#now would be a good time to print to the "katfile";
-					if(defined($extra_info)) {
-						print EXTRA $annot_orig{$key1}[0]; # print rs name to Katherine's special file
-						if(defined($genos_orig{$key1}[$c])) {
-							print EXTRA "\t".$genos_orig{$key1}[$c];
-						}
-						else{
-							print EXTRA "\t-1";
-						}
-						if($variantCaller eq "mpileup") {print EXTRA "\t".$chr."\t".$pos."\t".$totaldepth."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
-						if($variantCaller eq "unifiedgenotyper" || $variantCaller eq "haplotypecaller") {print EXTRA "\t".$chr."\t".$pos."\t".$DP."\t".$DP."\t".$MQ."\t".$FQ."\t".$AF1."\n"};
 					}
 				}
 			}
 		}
+		$c_sample += $samples_in_this_vcf;
 	}
 }
 	
@@ -694,7 +797,7 @@ sub write_brlmm(){
 	my @callarray=();
 	foreach $key (keys %genos_orig){
 		print OUT $annot_orig{$key}[0];
-		for($c = 0; $c < $num_files; $c++) {  #c<1 for now, multiple people to come
+		for($c = 0; $c < $c_sample; $c++) {  #c<1 for now, multiple people to come
 			print OUT "\t".$genos_orig{$key}[$c];
 		}
 		print OUT "\n";
@@ -714,7 +817,7 @@ my $snps_with_data=0;
 	print STDERR "In the recoding hash subroutine\n"; #ERROR CHECKING
 	foreach $key (keys %annot_orig){
 		$genocalls = 0;
-		for($c=0;$c<$num_files;$c++){
+		for($c=0; $c<$c_sample; $c++){
 			if(defined($genos_orig{$key}[$c])){
 				$genocalls = 1;
 			}
@@ -739,7 +842,7 @@ my $snps_with_data=0;
 	}
 	%annot_orig = %temp_hash_annot;
 	%genos_orig = %temp_hash_geno;
-	print STDERR "key_cnt =$key_cnt no of SNPs in annotation file.\n";
+	print STDERR "key_cnt = $key_cnt no of SNPs in annotation file.\n";
 	print STDERR "$snp_miss_cnt SNPs from the annotation file do not have any genotypes called in the vcf files in \n";
 	print STDERR "$snps_with_data SNPs that have both annotation and genotype data\n";
 }
@@ -757,7 +860,7 @@ my $c;
 		$recode_vcfgeno_hash{$alleleA.$alleleA}=0;
 		$recode_vcfgeno_hash{$alleleA.$alleleB}=1;
 		$recode_vcfgeno_hash{$alleleB.$alleleB}=2;
-		for($c=0; $c<$num_files; $c++) {
+		for($c=0; $c<$c_sample; $c++) {
 			if(defined($genos_orig{$key}[$c])) {
 				$temp = $genos_orig{$key}[$c];
 				$genos_orig{$key}[$c] = $recode_vcfgeno_hash{$genos_orig{$key}[$c]};
